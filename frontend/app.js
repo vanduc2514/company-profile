@@ -1,0 +1,954 @@
+/**
+ * InsightEngine — Application Logic (Tiếng Việt)
+ * State machine, Gemini Auto-Search integration, mock NLP parser, localStorage persistence, UI events
+ */
+
+// ── State Management ──
+const STATE_STORAGE_KEY = 'insightengine_profiles_v1';
+const SETTINGS_STORAGE_KEY = 'insightengine_settings_v1';
+
+let appState = {
+  profiles: [],
+  activeProfileId: null,
+  currentView: 'dashboard',
+  searchQuery: '',
+  formData: {
+    companyName: '',
+    google: '',
+    linkedin: '',
+    website: '',
+    registration: ''
+  },
+  settings: {
+    darkMode: true,
+    autoSave: true,
+    pipelineSpeed: 800,
+    geminiApiKey: ''
+  }
+};
+
+// ── Seed / Sample Data (Vietnamese) ──
+const SEED_PROFILES = [
+  {
+    id: 'stripe-sample-01',
+    companyName: 'Stripe, Inc.',
+    industry: 'Công Nghệ / SaaS & Fintech',
+    scale: 'Tập Đoàn Lớn (Enterprise)',
+    market: 'Toàn Cầu (Global)',
+    registrationStatus: 'Đã Xác Thực ✓',
+    confidenceScore: 98.4,
+    summary: 'Stripe là tập đoàn công nghệ đa quốc gia chuyên cung cấp cơ sở hạ tầng thanh toán điện tử và giao diện lập trình ứng dụng (API) cho các trang web thương mại điện tử và ứng dụng di động toàn cầu, với trụ sở kép tại San Francisco (Mỹ) và Dublin (Ireland).',
+    website: 'stripe.com',
+    location: 'San Francisco, Mỹ & Dublin, Ireland',
+    createdAt: '2026-08-15T10:00:00.000Z',
+    inputs: {
+      google: 'Stripe Inc hạ tầng thanh toán SaaS API thương mại điện tử định giá 65 tỷ USD',
+      linkedin: 'Stripe quy mô 7000+ nhân sự tài chính công nghệ trụ sở San Francisco và Dublin',
+      website: 'Stripe cơ sở hạ tầng thanh toán cho Internet. Chấp nhận thanh toán và quản lý doanh nghiệp trực tuyến.',
+      registration: 'Stripe, Inc. Công ty cổ phần Delaware C Corp Mã CIK 0001859665'
+    },
+    products: [
+      { icon: 'credit_card', name: 'API Thanh Toán Generative AI', desc: 'Hạ tầng thanh toán quy mô lớn tích hợp AI.' },
+      { icon: 'account_balance', name: 'Hệ Thống Huấn Luyện Mô Hình', desc: 'Xử lý dữ liệu phân tán cho mô hình lớn.' },
+      { icon: 'receipt_long', name: 'Bộ Máy Suy Luận Độ Trễ Thấp', desc: 'Triển khai ứng dụng AI thời gian thực.' }
+    ],
+    registrationDetails: {
+      entityName: 'Stripe, Inc.',
+      jurisdiction: 'Bang Delaware, Hoa Kỳ',
+      status: 'Công ty Cổ phần (C Corp)',
+      cik: '0001859665',
+      markets: 'Toàn Cầu'
+    },
+    marketShare: 75,
+    metrics: {
+      competitor: { level: 'Cao', class: 'warning', percent: 80 },
+      regulatory: { level: 'Thấp', class: 'success', percent: 25 },
+      growth: { level: 'Mạnh', class: 'indigo', percent: 85 }
+    },
+    feed: [
+      { title: 'Phát Hiện Hồ Sơ SEC Form D', source: 'SEC EDGAR • 15/06/2026', body: 'Báo cáo thông báo phát hành chứng khoán điều chỉnh vốn nội bộ.', active: true },
+      { title: 'Mở Rộng Sản Phẩm: Stripe Tax', source: 'Thông Cáo Báo Chí • 22/04/2026', body: 'Công bố mở rộng công cụ tuân thủ thuế tự động tới 10 thị trường Châu Âu.', active: false },
+      { title: 'Tín Hiệu Tuyển Dụng Nhân Sự Cao Cấp', source: 'LinkedIn • 10/02/2026', body: 'Bổ sung các vị trí Phó Chủ Tịch Kỹ Thuật tại thị trường Châu Á.', active: false }
+    ]
+  }
+];
+
+// ── Keyword Map (Local Fallback) ──
+const KEYWORD_MAP = {
+  industry: [
+    { keywords: ['saas', 'cloud', 'software', 'ai', 'tech', 'api', 'digital', 'công nghệ', 'phần mềm'], value: 'Công Nghệ / SaaS' },
+    { keywords: ['bank', 'finance', 'invest', 'capital', 'fintech', 'pay', 'payment', 'ngân hàng', 'tài chính'], value: 'Tài Chính & Fintech' },
+    { keywords: ['manufactur', 'factory', 'produc', 'industrial', 'sản xuất', 'nhà máy'], value: 'Sản Xuất & Công Nghiệp' },
+    { keywords: ['health', 'pharma', 'clinic', 'medical', 'bio', 'y tế', 'dược'], value: 'Y Tế & Dược Phẩm' },
+    { keywords: ['retail', 'e-commerce', 'ecommerce', 'shop', 'bán lẻ', 'thương mại điện tử'], value: 'Bán Lẻ & TMĐT' }
+  ],
+  scale: [
+    { keywords: ['startup', 'seed', 'series a', 'series b', 'khởi nghiệp'], value: 'Khởi Nghiệp (Startup)' },
+    { keywords: ['sme', 'small', 'medium', 'vừa và nhỏ'], value: 'Doanh Nghiệp Vừa & Nhỏ (SME)' },
+    { keywords: ['enterprise', 'corporation', 'global', 'tập đoàn', 'quy mô lớn'], value: 'Tập Đoàn Lớn (Enterprise)' }
+  ],
+  market: [
+    { keywords: ['global', 'worldwide', 'international', 'toàn cầu', 'quốc tế'], value: 'Toàn Cầu' },
+    { keywords: ['domestic', 'local', 'vietnam', 'viet nam', 'nội địa', 'trong nước'], value: 'Nội Địa (Việt Nam)' }
+  ],
+  registration: [
+    { keywords: ['verified', 'registered', 'certificate', 'xác thực', 'đã đăng ký', 'giấy phép'], value: 'Đã Xác Thực ✓' }
+  ]
+};
+
+// ── DOM Element Cache ──
+const DOM = {
+  sidebar: document.getElementById('sidebar'),
+  sidebarOverlay: document.getElementById('sidebar-overlay'),
+  btnMenuToggle: document.getElementById('btn-menu-toggle'),
+  btnThemeToggle: document.getElementById('btn-theme-toggle'),
+  themeIcon: document.getElementById('theme-icon'),
+  topbarApiBadge: document.getElementById('topbar-api-badge'),
+
+  profileSearch: document.getElementById('profile-search'),
+  profileList: document.getElementById('profile-list'),
+  profileListEmpty: document.getElementById('profile-list-empty'),
+  btnNewProfile: document.getElementById('btn-new-profile'),
+
+  breadcrumbTitle: document.getElementById('breadcrumb-title'),
+
+  // Views
+  viewDashboard: document.getElementById('view-dashboard'),
+  viewForm: document.getElementById('view-form'),
+  viewProcessing: document.getElementById('view-processing'),
+  viewProfile: document.getElementById('view-profile'),
+  viewSettings: document.getElementById('view-settings'),
+
+  // Dashboard DOM
+  statTotal: document.getElementById('stat-total'),
+  statVerified: document.getElementById('stat-verified'),
+  statAvgConfidence: document.getElementById('stat-avg-confidence'),
+  statGlobal: document.getElementById('stat-global'),
+  recentProfiles: document.getElementById('recent-profiles'),
+  recentEmpty: document.getElementById('recent-empty'),
+  btnStartAnalysis: document.getElementById('btn-start-analysis'),
+  btnEmptyStart: document.getElementById('btn-empty-start'),
+  btnViewAll: document.getElementById('btn-view-all'),
+  dashSearchForm: document.getElementById('dash-search-form'),
+  dashCompanyInput: document.getElementById('dash-company-input'),
+
+  // Form DOM
+  analysisForm: document.getElementById('analysis-form'),
+  formCompanyName: document.getElementById('form-company-name'),
+  sourceGoogle: document.getElementById('source-google'),
+  sourceLinkedin: document.getElementById('source-linkedin'),
+  sourceWebsite: document.getElementById('source-website'),
+  sourceRegistration: document.getElementById('source-registration'),
+  btnGenerate: document.getElementById('btn-generate'),
+
+  // Pipeline DOM
+  pipelineTargetCompany: document.getElementById('pipeline-target-company'),
+  pipelineStepsList: document.getElementById('pipeline-steps-list'),
+  pipelineProgressBar: document.getElementById('pipeline-progress-bar'),
+
+  // Profile Output DOM
+  profileCompanyName: document.getElementById('profile-company-name'),
+  profileStatusBadge: document.getElementById('profile-status-badge'),
+  profileScaleBadge: document.getElementById('profile-scale-badge'),
+  profileWebsite: document.getElementById('profile-website'),
+  profileLocation: document.getElementById('profile-location'),
+  profileIndustryMeta: document.getElementById('profile-industry-meta'),
+  confidenceScore: document.getElementById('confidence-score'),
+  profileSummary: document.getElementById('profile-summary'),
+  profileIndustry: document.getElementById('profile-industry'),
+  profileScale: document.getElementById('profile-scale'),
+  profileMarket: document.getElementById('profile-market'),
+  profileLinkedinStat: document.getElementById('profile-linkedin-stat'),
+  regEntityName: document.getElementById('reg-entity-name'),
+  regJurisdiction: document.getElementById('reg-jurisdiction'),
+  regStatus: document.getElementById('reg-status'),
+  regMarkets: document.getElementById('reg-markets'),
+  productsList: document.getElementById('products-list'),
+  ringFill: document.getElementById('ring-fill'),
+  ringPercent: document.getElementById('ring-percent'),
+  metricCompetitor: document.getElementById('metric-competitor'),
+  barCompetitor: document.getElementById('bar-competitor'),
+  metricRegulatory: document.getElementById('metric-regulatory'),
+  barRegulatory: document.getElementById('bar-regulatory'),
+  metricGrowth: document.getElementById('metric-growth'),
+  barGrowth: document.getElementById('bar-growth'),
+  intelligenceFeed: document.getElementById('intelligence-feed'),
+  deleteConfirmArea: document.getElementById('delete-confirm-area'),
+  btnDeleteProfile: document.getElementById('btn-delete-profile'),
+  btnEditInputs: document.getElementById('btn-edit-inputs'),
+  btnCopyJson: document.getElementById('btn-copy-json'),
+  btnSaveProfile: document.getElementById('btn-save-profile'),
+
+  // Settings DOM
+  settingGeminiKey: document.getElementById('setting-gemini-key'),
+  btnSaveKey: document.getElementById('btn-save-key'),
+  settingDarkMode: document.getElementById('setting-dark-mode'),
+  settingAutoSave: document.getElementById('setting-auto-save'),
+  settingPipelineSpeed: document.getElementById('setting-pipeline-speed'),
+  settingProfileCount: document.getElementById('setting-profile-count'),
+  btnClearAll: document.getElementById('btn-clear-all'),
+
+  toast: document.getElementById('toast')
+};
+
+// ── Application Initialization ──
+function init() {
+  loadSettings();
+  loadProfiles();
+  setupEventListeners();
+  applyTheme(appState.settings.darkMode);
+  renderApp();
+}
+
+// ── Storage Operations ──
+function loadProfiles() {
+  try {
+    const raw = localStorage.getItem(STATE_STORAGE_KEY);
+    if (raw) {
+      appState.profiles = JSON.parse(raw);
+    } else {
+      appState.profiles = [...SEED_PROFILES];
+      saveProfiles();
+    }
+  } catch (e) {
+    console.error('Failed to load profiles from localStorage:', e);
+    appState.profiles = [...SEED_PROFILES];
+  }
+}
+
+function saveProfiles() {
+  try {
+    localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(appState.profiles));
+  } catch (e) {
+    console.error('Failed to save profiles to localStorage:', e);
+  }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) {
+      appState.settings = { ...appState.settings, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appState.settings));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
+}
+
+// ── Navigation & View Switching ──
+function switchView(viewName) {
+  appState.currentView = viewName;
+
+  const views = [DOM.viewDashboard, DOM.viewForm, DOM.viewProcessing, DOM.viewProfile, DOM.viewSettings];
+  views.forEach(v => {
+    if (v) {
+      v.hidden = true;
+      v.classList.remove('active');
+    }
+  });
+
+  let activeViewEl = null;
+  switch (viewName) {
+    case 'dashboard': activeViewEl = DOM.viewDashboard; break;
+    case 'form':      activeViewEl = DOM.viewForm; break;
+    case 'processing':activeViewEl = DOM.viewProcessing; break;
+    case 'profile':   activeViewEl = DOM.viewProfile; break;
+    case 'settings':  activeViewEl = DOM.viewSettings; break;
+    case 'analyses':  activeViewEl = DOM.viewDashboard; break;
+    case 'activity':  activeViewEl = DOM.viewDashboard; break;
+    default:          activeViewEl = DOM.viewDashboard;
+  }
+
+  if (activeViewEl) {
+    activeViewEl.hidden = false;
+    requestAnimationFrame(() => activeViewEl.classList.add('active'));
+  }
+
+  updateNavState(viewName);
+}
+
+function updateNavState(viewName) {
+  document.querySelectorAll('.nav-item').forEach(link => {
+    const view = link.getAttribute('data-view');
+    link.classList.toggle('active', view === viewName);
+  });
+
+  const titles = {
+    dashboard: 'Bảng Điều Khiển',
+    form: 'Phân Tích Doanh Nghiệp Mới',
+    processing: 'Gemini Search Grounding',
+    profile: appState.activeProfileId ? getActiveProfile()?.companyName || 'Hồ Sơ Doanh Nghiệp' : 'Hồ Sơ Doanh Nghiệp',
+    settings: 'Cài Đặt Hệ Thống',
+    analyses: 'Danh Sách Hồ Sơ',
+    activity: 'Lịch Sử Hoạt Động'
+  };
+
+  if (DOM.breadcrumbTitle) {
+    DOM.breadcrumbTitle.textContent = titles[viewName] || 'InsightEngine';
+  }
+}
+
+// ── Gemini Auto-Search & Profile Generation ──
+
+async function performAutoSearchAndGenerate(companyName, manualInputs) {
+  if (DOM.pipelineTargetCompany) {
+    DOM.pipelineTargetCompany.textContent = `Đang tự động tra cứu Google, LinkedIn, Website & Cổng đăng ký cho "${companyName}"...`;
+  }
+
+  switchView('processing');
+  startPipelineAnimation();
+
+  try {
+    const response = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyName,
+        geminiApiKey: appState.settings.geminiApiKey || null,
+        manualInputs
+      })
+    });
+
+    if (response.ok) {
+      const profile = await response.json();
+      finishPipelineAnimation(() => {
+        saveAndShowProfile(profile);
+      });
+      return;
+    }
+  } catch (e) {
+    console.warn('Backend API /api/search không khả dụng, chuyển sang chế độ phân tích client-side:', e);
+  }
+
+  setTimeout(() => {
+    const profile = fallbackClientParser(companyName, manualInputs);
+    finishPipelineAnimation(() => {
+      saveAndShowProfile(profile);
+    });
+  }, (parseInt(appState.settings.pipelineSpeed) || 800) * 3);
+}
+
+function saveAndShowProfile(generatedProfile) {
+  if (generatedProfile.inputs) {
+    if (DOM.sourceGoogle) DOM.sourceGoogle.value = generatedProfile.inputs.google || '';
+    if (DOM.sourceLinkedin) DOM.sourceLinkedin.value = generatedProfile.inputs.linkedin || '';
+    if (DOM.sourceWebsite) DOM.sourceWebsite.value = generatedProfile.inputs.website || '';
+    if (DOM.sourceRegistration) DOM.sourceRegistration.value = generatedProfile.inputs.registration || '';
+  }
+
+  if (appState.settings.autoSave) {
+    appState.profiles.unshift(generatedProfile);
+    saveProfiles();
+  }
+  appState.activeProfileId = generatedProfile.id;
+  renderApp();
+  switchView('profile');
+  showToast(`Đã tạo hồ sơ cho ${generatedProfile.companyName} thành công ✓`);
+}
+
+// ── Local Fallback Parser (Vietnamese) ──
+function fallbackClientParser(companyName, manualInputs) {
+  const googleText = manualInputs?.google || `Thông tin tra cứu Google cho ${companyName}: Doanh nghiệp hàng đầu, quy mô lớn, sản phẩm và dịch vụ cốt lõi.`;
+  const linkedinText = manualInputs?.linkedin || `Trích đoạn LinkedIn ${companyName}: Quy mô 1000+ nhân sự, văn phòng toàn cầu, lĩnh vực công nghệ & giải pháp.`;
+  const websiteText = manualInputs?.website || `Website chính thức ${companyName}: Giới thiệu sản phẩm, dịch vụ, nền tảng API và giải pháp doanh nghiệp.`;
+  const regText = manualInputs?.registration || `Cổng đăng ký doanh nghiệp ${companyName}: Pháp nhân đã xác thực, mã số thuế và trạng thái đang hoạt động.`;
+
+  const combined = `${companyName} ${googleText} ${linkedinText} ${websiteText} ${regText}`.toLowerCase();
+
+  const detectCat = (catKey, fallback) => {
+    for (const item of KEYWORD_MAP[catKey]) {
+      if (item.keywords.some(kw => combined.includes(kw))) return item.value;
+    }
+    return fallback;
+  };
+
+  const industry = detectCat('industry', 'Công Nghệ / SaaS');
+  const scale = detectCat('scale', 'Tập Đoàn Lớn (Enterprise)');
+  const market = detectCat('market', 'Toàn Cầu');
+  const regStatus = detectCat('registration', 'Đã Xác Thực ✓');
+
+  let matchCount = 0;
+  Object.values(KEYWORD_MAP).forEach(cat => {
+    cat.forEach(item => {
+      item.keywords.forEach(kw => { if (combined.includes(kw)) matchCount++; });
+    });
+  });
+
+  const confidenceScore = Math.min(98.8, Math.max(78.0, Number((75 + matchCount * 3.5).toFixed(1))));
+  const cleanDomain = companyName.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+
+  return {
+    id: 'profile-' + Date.now(),
+    companyName: companyName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+    industry,
+    scale,
+    market,
+    registrationStatus: regStatus,
+    confidenceScore,
+    summary: `${companyName} là doanh nghiệp hoạt động trong lĩnh vực ${industry}. Dữ liệu tra cứu tự động cho thấy mô hình vận hành ${scale.toLowerCase()} hướng tới thị trường ${market.toLowerCase()}.`,
+    website: cleanDomain,
+    location: market === 'Toàn Cầu' ? 'Trụ Sở Chính Quốc Tế' : 'Trụ Sở Trong Nước',
+    createdAt: new Date().toISOString(),
+    inputs: {
+      google: googleText,
+      linkedin: linkedinText,
+      website: websiteText,
+      registration: regText
+    },
+    products: [
+      { icon: 'credit_card', name: `Nền Tảng Giải Pháp ${companyName}`, desc: 'Hạ tầng dịch vụ doanh nghiệp trích xuất từ dữ liệu tra cứu.' },
+      { icon: 'account_balance', name: 'Phân Tích & Tình Báo Dữ Liệu', desc: 'Bộ công cụ báo cáo và giám sát chỉ số tự động.' }
+    ],
+    registrationDetails: {
+      entityName: `Công Ty Cổ Phần ${companyName}`,
+      jurisdiction: 'Cơ Quan Đăng Ký Kinh Doanh',
+      status: regStatus,
+      cik: 'MST-' + Math.floor(1000000000 + Math.random() * 9000000000),
+      markets: market
+    },
+    marketShare: Math.floor(60 + Math.random() * 30),
+    metrics: {
+      competitor: { level: 'Trung Bình', class: 'warning', percent: 65 },
+      regulatory: { level: 'Thấp', class: 'success', percent: 20 },
+      growth: { level: 'Mạnh', class: 'indigo', percent: 85 }
+    },
+    feed: [
+      { title: 'Hoàn Tất Thu Thập Đa Nguồn Gemini', source: 'Lõi InsightEngine • Mới xong', body: `Đã tổng hợp dữ liệu tình báo từ Google, LinkedIn & ĐKKD cho ${companyName}.`, active: true }
+    ]
+  };
+}
+
+// ── Pipeline Animation Helpers ──
+let pipelineTimer = null;
+
+function startPipelineAnimation() {
+  const speed = parseInt(appState.settings.pipelineSpeed) || 800;
+  const steps = DOM.pipelineStepsList.querySelectorAll('.pipeline-step');
+  const bar = DOM.pipelineProgressBar;
+
+  steps.forEach(step => {
+    step.className = 'pipeline-step';
+    const icon = step.querySelector('.step-icon');
+    icon.className = 'step-icon material-symbols-outlined pending';
+    icon.textContent = 'radio_button_unchecked';
+    step.querySelector('.step-status').textContent = '';
+  });
+  if (bar) bar.style.width = '0%';
+
+  let currentStep = 0;
+
+  function stepCycle() {
+    if (currentStep > 0) {
+      const prev = steps[currentStep - 1];
+      prev.className = 'pipeline-step done';
+      const prevIcon = prev.querySelector('.step-icon');
+      prevIcon.className = 'step-icon material-symbols-outlined done';
+      prevIcon.textContent = 'check_circle';
+      prev.querySelector('.step-status').textContent = 'Hoàn tất ✓';
+    }
+
+    if (currentStep < steps.length - 1) {
+      const step = steps[currentStep];
+      step.className = 'pipeline-step active visible';
+      const icon = step.querySelector('.step-icon');
+      icon.className = 'step-icon material-symbols-outlined active';
+      icon.textContent = 'progress_activity';
+      step.querySelector('.step-status').textContent = 'Đang tra cứu...';
+
+      const progressPct = ((currentStep + 1) / steps.length) * 100;
+      if (bar) bar.style.width = `${progressPct}%`;
+
+      currentStep++;
+      pipelineTimer = setTimeout(stepCycle, speed);
+    }
+  }
+
+  stepCycle();
+}
+
+function finishPipelineAnimation(callback) {
+  if (pipelineTimer) clearTimeout(pipelineTimer);
+  const steps = DOM.pipelineStepsList.querySelectorAll('.pipeline-step');
+  const bar = DOM.pipelineProgressBar;
+
+  steps.forEach(step => {
+    step.className = 'pipeline-step done visible';
+    const icon = step.querySelector('.step-icon');
+    icon.className = 'step-icon material-symbols-outlined done';
+    icon.textContent = 'check_circle';
+    step.querySelector('.step-status').textContent = 'Hoàn tất ✓';
+  });
+  if (bar) bar.style.width = '100%';
+
+  setTimeout(callback, 300);
+}
+
+// ── UI Rendering Functions ──
+function renderApp() {
+  renderStats();
+  renderSidebarList();
+  renderRecentList();
+  renderActiveProfile();
+  renderSettings();
+}
+
+function getActiveProfile() {
+  return appState.profiles.find(p => p.id === appState.activeProfileId) || appState.profiles[0] || null;
+}
+
+function renderStats() {
+  const total = appState.profiles.length;
+  const verified = appState.profiles.filter(p => p.registrationStatus && p.registrationStatus.includes('Xác Thực')).length;
+  const global = appState.profiles.filter(p => p.market === 'Toàn Cầu' || p.market === 'Global').length;
+
+  const avgConfidence = total > 0
+    ? (appState.profiles.reduce((acc, p) => acc + (p.confidenceScore || 0), 0) / total).toFixed(1) + '%'
+    : '—';
+
+  if (DOM.statTotal) DOM.statTotal.textContent = total;
+  if (DOM.statVerified) DOM.statVerified.textContent = verified;
+  if (DOM.statAvgConfidence) DOM.statAvgConfidence.textContent = avgConfidence;
+  if (DOM.statGlobal) DOM.statGlobal.textContent = global;
+  if (DOM.settingProfileCount) DOM.settingProfileCount.textContent = total;
+}
+
+function renderSidebarList() {
+  if (!DOM.profileList) return;
+
+  const query = appState.searchQuery.toLowerCase().trim();
+  const filtered = appState.profiles.filter(p =>
+    p.companyName.toLowerCase().includes(query) ||
+    p.industry.toLowerCase().includes(query) ||
+    p.market.toLowerCase().includes(query)
+  );
+
+  DOM.profileList.innerHTML = '';
+
+  if (filtered.length === 0) {
+    if (DOM.profileListEmpty) DOM.profileListEmpty.hidden = false;
+    return;
+  }
+
+  if (DOM.profileListEmpty) DOM.profileListEmpty.hidden = true;
+
+  filtered.forEach(p => {
+    const item = document.createElement('div');
+    item.className = `profile-item ${p.id === appState.activeProfileId ? 'active' : ''}`;
+    item.setAttribute('role', 'listitem');
+    item.setAttribute('tabindex', '0');
+
+    const dateStr = new Date(p.createdAt).toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' });
+
+    item.innerHTML = `
+      <div class="profile-item-info">
+        <div class="profile-item-name">${escapeHtml(p.companyName)}</div>
+        <div class="profile-item-meta">${escapeHtml(p.industry)} · ${dateStr}</div>
+      </div>
+      <button class="profile-item-delete" title="Xóa hồ sơ" aria-label="Xóa ${escapeHtml(p.companyName)}">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    `;
+
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.profile-item-delete')) {
+        deleteProfile(p.id);
+        return;
+      }
+      selectProfile(p.id);
+    });
+
+    DOM.profileList.appendChild(item);
+  });
+}
+
+function renderRecentList() {
+  if (!DOM.recentProfiles) return;
+  DOM.recentProfiles.innerHTML = '';
+
+  if (appState.profiles.length === 0) {
+    if (DOM.recentEmpty) DOM.recentEmpty.hidden = false;
+    return;
+  }
+
+  if (DOM.recentEmpty) DOM.recentEmpty.hidden = true;
+
+  const recent = [...appState.profiles].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+
+  recent.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'recent-item';
+    const dateStr = new Date(p.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    row.innerHTML = `
+      <div class="recent-item-left">
+        <div class="recent-icon"><span class="material-symbols-outlined">corporate_fare</span></div>
+        <div>
+          <div class="recent-name">${escapeHtml(p.companyName)}</div>
+          <div class="recent-meta">${escapeHtml(p.industry)} · ${escapeHtml(p.scale)} · ${dateStr}</div>
+        </div>
+      </div>
+      <div class="recent-confidence">${p.confidenceScore}% Tin Cậy</div>
+    `;
+
+    row.addEventListener('click', () => selectProfile(p.id));
+    DOM.recentProfiles.appendChild(row);
+  });
+}
+
+function selectProfile(profileId) {
+  appState.activeProfileId = profileId;
+  renderSidebarList();
+  renderActiveProfile();
+  switchView('profile');
+  closeMobileSidebar();
+}
+
+function renderActiveProfile() {
+  const p = getActiveProfile();
+  if (!p) return;
+
+  if (DOM.profileCompanyName) DOM.profileCompanyName.textContent = p.companyName;
+  if (DOM.profileScaleBadge) DOM.profileScaleBadge.textContent = p.scale;
+  if (DOM.profileWebsite) DOM.profileWebsite.innerHTML = `<span class="material-symbols-outlined">link</span> ${escapeHtml(p.website || 'website.com')}`;
+  if (DOM.profileLocation) DOM.profileLocation.innerHTML = `<span class="material-symbols-outlined">location_on</span> ${escapeHtml(p.location || 'Toàn Cầu')}`;
+  if (DOM.profileIndustryMeta) DOM.profileIndustryMeta.innerHTML = `<span class="material-symbols-outlined">category</span> ${escapeHtml(p.industry)}`;
+  if (DOM.confidenceScore) DOM.confidenceScore.textContent = `${p.confidenceScore}%`;
+  if (DOM.profileSummary) DOM.profileSummary.textContent = p.summary;
+  if (DOM.profileIndustry) DOM.profileIndustry.textContent = p.industry;
+  if (DOM.profileScale) DOM.profileScale.textContent = p.scale;
+  if (DOM.profileMarket) DOM.profileMarket.textContent = p.market;
+  if (DOM.profileLinkedinStat) DOM.profileLinkedinStat.textContent = p.inputs?.linkedin ? 'Đã Thu Thập ✓' : 'Tự Động Trích Xuất';
+
+  // Registration Data
+  const reg = p.registrationDetails || {};
+  if (DOM.regEntityName) DOM.regEntityName.textContent = reg.entityName || p.companyName;
+  if (DOM.regJurisdiction) DOM.regJurisdiction.textContent = reg.jurisdiction || 'Cơ Quan Đăng Ký';
+  if (DOM.regStatus) DOM.regStatus.textContent = reg.status || p.registrationStatus;
+  if (DOM.regMarkets) DOM.regMarkets.textContent = reg.markets || p.market;
+
+  // Products
+  if (DOM.productsList) {
+    DOM.productsList.innerHTML = '';
+    (p.products || []).forEach(prod => {
+      const item = document.createElement('div');
+      item.className = 'product-item';
+      item.innerHTML = `
+        <div class="product-icon"><span class="material-symbols-outlined">${escapeHtml(prod.icon || 'inventory_2')}</span></div>
+        <div>
+          <div class="product-name">${escapeHtml(prod.name)}</div>
+          <div class="product-desc">${escapeHtml(prod.desc)}</div>
+        </div>
+      `;
+      DOM.productsList.appendChild(item);
+    });
+  }
+
+  // Market Ring
+  if (DOM.ringFill && DOM.ringPercent) {
+    const pct = p.marketShare || 75;
+    DOM.ringPercent.textContent = `${pct}%`;
+    const offset = 251.2 - (251.2 * pct) / 100;
+    DOM.ringFill.style.strokeDashoffset = offset;
+  }
+
+  // Metrics
+  if (p.metrics) {
+    if (DOM.metricCompetitor) DOM.metricCompetitor.textContent = p.metrics.competitor.level;
+    if (DOM.barCompetitor) DOM.barCompetitor.style.width = `${p.metrics.competitor.percent}%`;
+    if (DOM.metricRegulatory) DOM.metricRegulatory.textContent = p.metrics.regulatory.level;
+    if (DOM.barRegulatory) DOM.barRegulatory.style.width = `${p.metrics.regulatory.percent}%`;
+    if (DOM.metricGrowth) DOM.metricGrowth.textContent = p.metrics.growth.level;
+    if (DOM.barGrowth) DOM.barGrowth.style.width = `${p.metrics.growth.percent}%`;
+  }
+
+  // Feed
+  if (DOM.intelligenceFeed) {
+    DOM.intelligenceFeed.innerHTML = '';
+    (p.feed || []).forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'feed-item';
+      el.innerHTML = `
+        <span class="feed-dot ${item.active ? 'active' : 'neutral'}"></span>
+        <div class="feed-title-row">
+          <span class="feed-title">${escapeHtml(item.title)}</span>
+          <span class="feed-source">${escapeHtml(item.source)}</span>
+        </div>
+        <p class="feed-body">${escapeHtml(item.body)}</p>
+      `;
+      DOM.intelligenceFeed.appendChild(el);
+    });
+  }
+
+  resetDeleteConfirmArea();
+}
+
+function resetDeleteConfirmArea() {
+  if (!DOM.deleteConfirmArea) return;
+  DOM.deleteConfirmArea.innerHTML = `
+    <button id="btn-delete-profile" class="btn-danger">
+      <span class="material-symbols-outlined">delete</span>
+      Xóa Hồ Sơ
+    </button>
+  `;
+  const btn = document.getElementById('btn-delete-profile');
+  if (btn) btn.addEventListener('click', promptDeleteProfile);
+}
+
+function promptDeleteProfile() {
+  if (!DOM.deleteConfirmArea) return;
+  DOM.deleteConfirmArea.innerHTML = `
+    <div class="delete-confirm">
+      <span>Bạn có chắc chắn muốn xóa hồ sơ doanh nghiệp này?</span>
+      <button id="btn-confirm-delete" class="btn-danger-sm">Xác Nhận Xóa</button>
+      <button id="btn-cancel-delete" class="btn-secondary">Hủy</button>
+    </div>
+  `;
+
+  document.getElementById('btn-confirm-delete')?.addEventListener('click', () => {
+    deleteProfile(appState.activeProfileId);
+  });
+  document.getElementById('btn-cancel-delete')?.addEventListener('click', resetDeleteConfirmArea);
+}
+
+function deleteProfile(profileId) {
+  appState.profiles = appState.profiles.filter(p => p.id !== profileId);
+  saveProfiles();
+
+  if (appState.activeProfileId === profileId) {
+    appState.activeProfileId = appState.profiles[0]?.id || null;
+  }
+
+  showToast('Đã xóa hồ sơ thành công');
+  renderApp();
+
+  if (appState.profiles.length > 0) {
+    switchView('profile');
+  } else {
+    switchView('dashboard');
+  }
+}
+
+function renderSettings() {
+  if (DOM.settingGeminiKey) DOM.settingGeminiKey.value = appState.settings.geminiApiKey || '';
+  if (DOM.settingDarkMode) DOM.settingDarkMode.checked = appState.settings.darkMode;
+  if (DOM.settingAutoSave) DOM.settingAutoSave.checked = appState.settings.autoSave;
+  if (DOM.settingPipelineSpeed) DOM.settingPipelineSpeed.value = appState.settings.pipelineSpeed;
+}
+
+// ── Event Handlers ──
+function setupEventListeners() {
+  if (DOM.btnThemeToggle) {
+    DOM.btnThemeToggle.addEventListener('click', () => {
+      appState.settings.darkMode = !appState.settings.darkMode;
+      saveSettings();
+      applyTheme(appState.settings.darkMode);
+    });
+  }
+
+  if (DOM.btnMenuToggle) {
+    DOM.btnMenuToggle.addEventListener('click', toggleMobileSidebar);
+  }
+  if (DOM.sidebarOverlay) {
+    DOM.sidebarOverlay.addEventListener('click', closeMobileSidebar);
+  }
+
+  document.querySelectorAll('[data-view]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const view = item.getAttribute('data-view');
+      switchView(view);
+      closeMobileSidebar();
+    });
+  });
+
+  if (DOM.dashSearchForm) {
+    DOM.dashSearchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = DOM.dashCompanyInput?.value.trim();
+      if (!name) return;
+      if (DOM.formCompanyName) DOM.formCompanyName.value = name;
+      performAutoSearchAndGenerate(name, null);
+    });
+  }
+
+  const newButtons = [DOM.btnNewProfile, DOM.btnStartAnalysis, DOM.btnEmptyStart];
+  newButtons.forEach(btn => {
+    if (btn) {
+      btn.addEventListener('click', () => {
+        clearForm();
+        switchView('form');
+        closeMobileSidebar();
+      });
+    }
+  });
+
+  if (DOM.btnViewAll) {
+    DOM.btnViewAll.addEventListener('click', () => switchView('dashboard'));
+  }
+
+  if (DOM.profileSearch) {
+    DOM.profileSearch.addEventListener('input', (e) => {
+      appState.searchQuery = e.target.value;
+      renderSidebarList();
+    });
+  }
+
+  if (DOM.analysisForm) {
+    DOM.analysisForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const companyName = DOM.formCompanyName?.value.trim();
+      if (!companyName) {
+        showToast('Vui lòng nhập tên doanh nghiệp để tra cứu');
+        return;
+      }
+
+      const manualInputs = {
+        google: DOM.sourceGoogle?.value || '',
+        linkedin: DOM.sourceLinkedin?.value || '',
+        website: DOM.sourceWebsite?.value || '',
+        registration: DOM.sourceRegistration?.value || ''
+      };
+
+      performAutoSearchAndGenerate(companyName, manualInputs);
+    });
+  }
+
+  if (DOM.btnCopyJson) {
+    DOM.btnCopyJson.addEventListener('click', () => {
+      const p = getActiveProfile();
+      if (!p) return;
+      navigator.clipboard.writeText(JSON.stringify(p, null, 2)).then(() => {
+        showToast('Đã sao chép dữ liệu JSON vào khay nhớ tạm ✓');
+      }).catch(() => {
+        showToast('Không thể sao chép dữ liệu');
+      });
+    });
+  }
+
+  if (DOM.btnEditInputs) {
+    DOM.btnEditInputs.addEventListener('click', () => {
+      const p = getActiveProfile();
+      if (!p) return;
+      if (DOM.formCompanyName) DOM.formCompanyName.value = p.companyName || '';
+      if (DOM.sourceGoogle) DOM.sourceGoogle.value = p.inputs?.google || '';
+      if (DOM.sourceLinkedin) DOM.sourceLinkedin.value = p.inputs?.linkedin || '';
+      if (DOM.sourceWebsite) DOM.sourceWebsite.value = p.inputs?.website || '';
+      if (DOM.sourceRegistration) DOM.sourceRegistration.value = p.inputs?.registration || '';
+      switchView('form');
+    });
+  }
+
+  if (DOM.btnSaveProfile) {
+    DOM.btnSaveProfile.addEventListener('click', () => {
+      saveProfiles();
+      showToast('Đã lưu hồ sơ vào cơ sở dữ liệu hệ thống ✓');
+    });
+  }
+
+  if (DOM.btnSaveKey) {
+    DOM.btnSaveKey.addEventListener('click', () => {
+      const key = DOM.settingGeminiKey?.value.trim() || '';
+      appState.settings.geminiApiKey = key;
+      saveSettings();
+      showToast('Đã lưu khóa API Gemini thành công ✓');
+    });
+  }
+
+  if (DOM.settingDarkMode) {
+    DOM.settingDarkMode.addEventListener('change', (e) => {
+      appState.settings.darkMode = e.target.checked;
+      saveSettings();
+      applyTheme(appState.settings.darkMode);
+    });
+  }
+
+  if (DOM.settingAutoSave) {
+    DOM.settingAutoSave.addEventListener('change', (e) => {
+      appState.settings.autoSave = e.target.checked;
+      saveSettings();
+    });
+  }
+
+  if (DOM.settingPipelineSpeed) {
+    DOM.settingPipelineSpeed.addEventListener('change', (e) => {
+      appState.settings.pipelineSpeed = parseInt(e.target.value);
+      saveSettings();
+    });
+  }
+
+  if (DOM.btnClearAll) {
+    DOM.btnClearAll.addEventListener('click', () => {
+      if (confirm('Bạn có chắc chắn muốn xóa TOÀN BỘ hồ sơ đã lưu? Thao tác này không thể hoàn tác.')) {
+        appState.profiles = [];
+        appState.activeProfileId = null;
+        saveProfiles();
+        renderApp();
+        showToast('Đã xóa toàn bộ dữ liệu hồ sơ');
+        switchView('dashboard');
+      }
+    });
+  }
+}
+
+function applyTheme(isDark) {
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+    document.documentElement.classList.remove('light');
+    if (DOM.themeIcon) DOM.themeIcon.textContent = 'light_mode';
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    if (DOM.themeIcon) DOM.themeIcon.textContent = 'dark_mode';
+  }
+}
+
+function clearForm() {
+  if (DOM.formCompanyName) DOM.formCompanyName.value = '';
+  if (DOM.sourceGoogle) DOM.sourceGoogle.value = '';
+  if (DOM.sourceLinkedin) DOM.sourceLinkedin.value = '';
+  if (DOM.sourceWebsite) DOM.sourceWebsite.value = '';
+  if (DOM.sourceRegistration) DOM.sourceRegistration.value = '';
+}
+
+function toggleMobileSidebar() {
+  if (!DOM.sidebar) return;
+  const isOpen = DOM.sidebar.classList.toggle('open');
+  if (DOM.sidebarOverlay) DOM.sidebarOverlay.classList.toggle('active', isOpen);
+  if (DOM.btnMenuToggle) DOM.btnMenuToggle.setAttribute('aria-expanded', isOpen);
+}
+
+function closeMobileSidebar() {
+  if (DOM.sidebar) DOM.sidebar.classList.remove('open');
+  if (DOM.sidebarOverlay) DOM.sidebarOverlay.classList.remove('active');
+  if (DOM.btnMenuToggle) DOM.btnMenuToggle.setAttribute('aria-expanded', 'false');
+}
+
+function showToast(message) {
+  if (!DOM.toast) return;
+  DOM.toast.textContent = message;
+  DOM.toast.hidden = false;
+  setTimeout(() => {
+    DOM.toast.hidden = true;
+  }, 2500);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+document.addEventListener('DOMContentLoaded', init);

@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InsightEngine — Phân Tích Hồ Sơ Doanh Nghiệp Tự Động</title>
+  <meta name="description" content="InsightEngine tự động phân tích và tạo hồ sơ doanh nghiệp bằng cách tìm kiếm dữ liệu đa nguồn qua Google Gemini Search Grounding." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <!-- Material Symbols -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ========== SIDEBAR ========== -->
+  <aside id="sidebar" class="sidebar" aria-label="Thanh điều hướng">
+    <!-- Logo -->
+    <div class="sidebar-logo">
+      <div class="logo-icon" aria-hidden="true">
+        <span class="material-symbols-outlined">radar</span>
+      </div>
+      <div class="logo-text">
+        <h1 class="logo-title">InsightEngine</h1>
+        <p class="logo-subtitle">Hệ Thống Trí Tuệ Gemini</p>
+      </div>
+    </div>
+
+    <!-- New Analysis Button -->
+    <div class="sidebar-action">
+      <button id="btn-new-profile" class="btn-new" aria-label="Tạo phân tích mới">
+        <span class="material-symbols-outlined" aria-hidden="true">add</span>
+        Phân Tích Mới
+      </button>
+    </div>
+
+    <!-- Nav Links -->
+    <nav class="sidebar-nav" aria-label="Điều hướng chính">
+      <a href="#" id="nav-dashboard" class="nav-item active" data-view="dashboard" aria-current="page">
+        <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
+        <span>Bảng Điều Khiển</span>
+      </a>
+      <a href="#" id="nav-analyses" class="nav-item" data-view="analyses">
+        <span class="material-symbols-outlined" aria-hidden="true">analytics</span>
+        <span>Danh Sách Hồ Sơ</span>
+      </a>
+      <a href="#" id="nav-activity" class="nav-item" data-view="activity">
+        <span class="material-symbols-outlined" aria-hidden="true">history</span>
+        <span>Lịch Sử Hoạt Động</span>
+      </a>
+
+      <div class="nav-section-label">Thư Viện Hồ Sơ</div>
+
+      <!-- Search -->
+      <div class="sidebar-search">
+        <span class="material-symbols-outlined search-icon" aria-hidden="true">search</span>
+        <input id="profile-search" type="search" placeholder="Tìm kiếm hồ sơ…" aria-label="Tìm kiếm hồ sơ đã lưu" autocomplete="off" />
+      </div>
+
+      <!-- Saved Profiles List -->
+      <div id="profile-list" class="profile-list" role="list" aria-label="Hồ sơ đã lưu">
+        <!-- Populated by JS -->
+      </div>
+
+      <div id="profile-list-empty" class="profile-list-empty" hidden>
+        <span class="material-symbols-outlined" aria-hidden="true">manage_search</span>
+        <span>Không tìm thấy hồ sơ nào</span>
+      </div>
+    </nav>
+
+    <!-- Bottom: Settings & Status -->
+    <div class="sidebar-footer">
+      <a href="#" id="nav-settings" class="nav-item" data-view="settings">
+        <span class="material-symbols-outlined" aria-hidden="true">settings</span>
+        <span>Cài Đặt Hệ Thống</span>
+      </a>
+      <div class="system-status">
+        <span class="material-symbols-outlined status-icon" aria-hidden="true">memory</span>
+        <span>Lõi AI Gemini</span>
+        <span class="status-dot" aria-label="Đang hoạt động"></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Mobile overlay -->
+  <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+
+  <!-- ========== TOPBAR ========== -->
+  <nav id="topbar" class="topbar" role="navigation" aria-label="Thanh công cụ trên">
+    <div class="topbar-left">
+      <button id="btn-menu-toggle" class="btn-icon mobile-only" aria-label="Mở danh mục sidebar" aria-expanded="false" aria-controls="sidebar">
+        <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+      </button>
+      <div id="breadcrumb" class="breadcrumb desktop-only" aria-label="Thanh điều hướng nhanh">
+        <span class="material-symbols-outlined" aria-hidden="true">folder_shared</span>
+        <span class="breadcrumb-section">Hồ Sơ Đã Lưu</span>
+        <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+        <span id="breadcrumb-title" class="breadcrumb-active">Bảng Điều Khiển</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <!-- Global Search -->
+      <div class="topbar-search desktop-only">
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+        <input type="search" placeholder="Tra cứu thông số..." aria-label="Tìm kiếm toàn hệ thống" />
+      </div>
+      <!-- API Key Status Indicator -->
+      <div id="topbar-api-badge" class="api-status-badge" title="Khóa API Gemini đã cấu hình">
+        <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+        <span>Gemini AI</span>
+      </div>
+      <!-- Notifications -->
+      <button class="btn-icon" aria-label="Thông báo">
+        <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
+        <span class="notif-dot pulse-glow" aria-hidden="true"></span>
+      </button>
+      <!-- Theme toggle -->
+      <button id="btn-theme-toggle" class="btn-icon" aria-label="Chuyển đổi giao diện sáng/tối">
+        <span class="material-symbols-outlined theme-icon" id="theme-icon" aria-hidden="true">light_mode</span>
+      </button>
+      <!-- Avatar -->
+      <div class="avatar" role="img" aria-label="Ảnh đại diện người dùng">IE</div>
+    </div>
+  </nav>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main id="main-content" class="main-content" role="main">
+
+    <!-- ===== VIEW: DASHBOARD ===== -->
+    <section id="view-dashboard" class="view active" aria-label="Bảng điều khiển">
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Bảng Điều Khiển</h2>
+          <p class="page-subtitle">Tổng quan thông tin tình báo doanh nghiệp & Tra cứu đa nguồn</p>
+        </div>
+        <button id="btn-start-analysis" class="btn-primary" aria-label="Bắt đầu phân tích mới">
+          <span class="material-symbols-outlined" aria-hidden="true">add</span>
+          Phân Tích Mới
+        </button>
+      </div>
+
+      <!-- Quick Auto-Search Bar on Dashboard -->
+      <div class="glass-panel search-hero-panel">
+        <div class="hero-content">
+          <div class="hero-badge">
+            <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+            <span>Google Search Grounding AI</span>
+          </div>
+          <h3 class="hero-title">Tự Động Tạo Hồ Sơ Doanh Nghiệp</h3>
+          <p class="hero-subtitle">Nhập tên doanh nghiệp hoặc tên miền. AI sẽ tự động truy vấn Google, LinkedIn, Website & Cổng đăng ký kinh doanh.</p>
+          <form id="dash-search-form" class="hero-search-box">
+            <div class="search-input-group">
+              <span class="material-symbols-outlined search-box-icon" aria-hidden="true">domain</span>
+              <input id="dash-company-input" type="text" placeholder="Nhập tên doanh nghiệp (Ví dụ: Stripe, OpenAI, VinFast, Viettel)..." required />
+            </div>
+            <button type="submit" class="btn-hero-submit">
+              <span class="material-symbols-outlined btn-icon-sparkle" aria-hidden="true">auto_awesome</span>
+              <span>Phân Tích Doanh Nghiệp</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-grid" role="list" aria-label="Thống kê tổng quan">
+        <div class="stat-card" role="listitem">
+          <div class="stat-icon indigo"><span class="material-symbols-outlined" aria-hidden="true">folder_shared</span></div>
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Tổng Số Hồ Sơ</div>
+        </div>
+        <div class="stat-card" role="listitem">
+          <div class="stat-icon green"><span class="material-symbols-outlined" aria-hidden="true">verified</span></div>
+          <div class="stat-value" id="stat-verified">0</div>
+          <div class="stat-label">Đã Xác Thực Pháp Lý</div>
+        </div>
+        <div class="stat-card" role="listitem">
+          <div class="stat-icon amber"><span class="material-symbols-outlined" aria-hidden="true">psychology</span></div>
+          <div class="stat-value" id="stat-avg-confidence">—</div>
+          <div class="stat-label">Độ Tin Cậy Trung Bình</div>
+        </div>
+        <div class="stat-card" role="listitem">
+          <div class="stat-icon blue"><span class="material-symbols-outlined" aria-hidden="true">public</span></div>
+          <div class="stat-value" id="stat-global">0</div>
+          <div class="stat-label">Thị Trường Toàn Cầu</div>
+        </div>
+      </div>
+
+      <!-- Recent Profiles -->
+      <div class="glass-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="material-symbols-outlined" aria-hidden="true">history</span>
+            <h3>Phân Tích Gần Đây</h3>
+          </div>
+          <button class="btn-ghost-sm" id="btn-view-all" aria-label="Xem tất cả hồ sơ">Xem Tất Cả</button>
+        </div>
+        <div id="recent-profiles" class="recent-list">
+          <!-- Populated by JS -->
+        </div>
+        <div id="recent-empty" class="empty-state">
+          <span class="material-symbols-outlined" aria-hidden="true">inbox</span>
+          <h4>Chưa có phân tích nào</h4>
+          <p>Tạo hồ sơ doanh nghiệp đầu tiên để bắt đầu</p>
+          <button class="btn-primary" id="btn-empty-start" aria-label="Bắt đầu tạo hồ sơ">
+            <span class="material-symbols-outlined" aria-hidden="true">add</span>
+            Tạo Hồ Sơ Mới
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== VIEW: INPUT FORM ===== -->
+    <section id="view-form" class="view" aria-label="Biểu mẫu nhập liệu" hidden>
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Phân Tích Doanh Nghiệp Mới</h2>
+          <p class="page-subtitle">Tự động tìm kiếm đa nguồn hoặc nhập thủ công bên dưới</p>
+        </div>
+      </div>
+
+      <form id="analysis-form" class="form-layout" novalidate aria-label="Biểu mẫu phân tích doanh nghiệp">
+        
+        <!-- Primary Auto-Search Card -->
+        <div class="glass-panel main-search-card">
+          <div class="search-card-header">
+            <span class="material-symbols-outlined text-accent" aria-hidden="true">travel_explore</span>
+            <div>
+              <h3 class="search-card-title">Nhập Tên Doanh Nghiệp Cần Tra Cứu</h3>
+              <p class="search-card-sub">AI Gemini sẽ tự động truy vấn thông tin từ Google, LinkedIn, Website chính thức và Đăng ký kinh doanh.</p>
+            </div>
+          </div>
+          <div class="company-input-wrapper">
+            <span class="material-symbols-outlined input-icon" aria-hidden="true">domain</span>
+            <input id="form-company-name" type="text" class="company-name-input" placeholder="Tên doanh nghiệp hoặc Website (Ví dụ: Stripe, OpenAI, VinFast, FPT)" required />
+          </div>
+          
+          <button id="btn-generate" type="submit" class="btn-generate" aria-label="Tự động tra cứu và tạo hồ sơ">
+            <span class="material-symbols-outlined btn-icon-sparkle" aria-hidden="true">travel_explore</span>
+            <span>Tự Động Tra Cứu & Tạo Hồ Sơ</span>
+          </button>
+        </div>
+
+        <!-- Collapsible Manual Override Accordion -->
+        <details class="manual-accordion" id="manual-accordion">
+          <summary class="accordion-summary">
+            <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+            <span>Tùy Chọn Mở Rộng: Nhập Dữ Liệu Nguồn Thủ Công (Không bắt buộc)</span>
+            <span class="material-symbols-outlined chevron-icon" aria-hidden="true">expand_more</span>
+          </summary>
+
+          <div class="sources-grid">
+            <!-- Source: Google -->
+            <div class="source-card" data-source="google">
+              <div class="source-header">
+                <span class="source-accent google"></span>
+                <svg class="source-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                <label for="source-google" class="source-label">Trích Đoạn Google Search</label>
+              </div>
+              <textarea id="source-google" name="google" class="source-textarea" rows="3" placeholder="Nhập bổ sung kết quả tìm kiếm Google..." aria-label="Nhập dữ liệu Google Search"></textarea>
+            </div>
+
+            <!-- Source: LinkedIn -->
+            <div class="source-card" data-source="linkedin">
+              <div class="source-header">
+                <span class="source-accent linkedin"></span>
+                <svg class="source-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0077b5" d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                <label for="source-linkedin" class="source-label">Thông Tin LinkedIn</label>
+              </div>
+              <textarea id="source-linkedin" name="linkedin" class="source-textarea" rows="3" placeholder="Nhập bổ sung mô tả LinkedIn doanh nghiệp..." aria-label="Nhập dữ liệu LinkedIn"></textarea>
+            </div>
+
+            <!-- Source: Website -->
+            <div class="source-card" data-source="website">
+              <div class="source-header">
+                <span class="source-accent website"></span>
+                <span class="material-symbols-outlined source-logo-icon" aria-hidden="true">language</span>
+                <label for="source-website" class="source-label">Website Doanh Nghiệp</label>
+              </div>
+              <textarea id="source-website" name="website" class="source-textarea" rows="3" placeholder="Nhập bổ sung nội dung trang chủ hoặc sản phẩm..." aria-label="Nhập dữ liệu Website"></textarea>
+            </div>
+
+            <!-- Source: Registration -->
+            <div class="source-card" data-source="registration">
+              <div class="source-header">
+                <span class="source-accent registration"></span>
+                <span class="material-symbols-outlined source-logo-icon" aria-hidden="true">gavel</span>
+                <label for="source-registration" class="source-label">Đăng Ký Kinh Doanh</label>
+              </div>
+              <textarea id="source-registration" name="registration" class="source-textarea" rows="3" placeholder="Nhập bổ sung giấy phép ĐKKD hoặc mã số thuế..." aria-label="Nhập dữ liệu Đăng ký kinh doanh"></textarea>
+            </div>
+          </div>
+        </details>
+      </form>
+    </section>
+
+    <!-- ===== VIEW: PROCESSING PIPELINE ===== -->
+    <section id="view-processing" class="view" aria-label="Quy trình xử lý AI" hidden aria-live="polite">
+      <div class="pipeline-container">
+        <div class="pipeline-header">
+          <div class="pipeline-logo pulse-glow-slow">
+            <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+          </div>
+          <h2 class="pipeline-title">Dây Chuyền Xử Lý Gemini Search Grounding</h2>
+          <p id="pipeline-target-company" class="pipeline-subtitle">Đang tự động truy vấn Google, LinkedIn, Website & Cổng đăng ký...</p>
+        </div>
+
+        <div class="pipeline-steps" role="list" id="pipeline-steps-list" aria-label="Các bước xử lý">
+          <div class="pipeline-step" data-step="0" role="listitem">
+            <div class="step-indicator">
+              <span class="step-icon material-symbols-outlined pending" aria-hidden="true">radio_button_unchecked</span>
+            </div>
+            <div class="step-content">
+              <div class="step-name">1. Truy Vấn Google & LinkedIn Qua Gemini AI</div>
+              <div class="step-desc">Thực hiện Google Search Grounding thu thập dữ liệu web & hồ sơ chuyên nghiệp</div>
+            </div>
+            <div class="step-status" aria-live="polite"></div>
+          </div>
+          <div class="pipeline-step" data-step="1" role="listitem">
+            <div class="step-indicator">
+              <span class="step-icon material-symbols-outlined pending" aria-hidden="true">radio_button_unchecked</span>
+            </div>
+            <div class="step-content">
+              <div class="step-name">2. Trích Xuất Thông Tin Website & Pháp Lý</div>
+              <div class="step-desc">Phân tích danh mục sản phẩm, thẩm quyền đăng ký & mã số doanh nghiệp</div>
+            </div>
+            <div class="step-status" aria-live="polite"></div>
+          </div>
+          <div class="pipeline-step" data-step="2" role="listitem">
+            <div class="step-indicator">
+              <span class="step-icon material-symbols-outlined pending" aria-hidden="true">radio_button_unchecked</span>
+            </div>
+            <div class="step-content">
+              <div class="step-name">3. Cấu Trúc Hóa Hồ Sơ Bento Enterprise</div>
+              <div class="step-desc">Tổng hợp giải pháp, phân loại quy mô & tính toán chỉ số tăng trưởng</div>
+            </div>
+            <div class="step-status" aria-live="polite"></div>
+          </div>
+          <div class="pipeline-step" data-step="3" role="listitem">
+            <div class="step-indicator">
+              <span class="step-icon material-symbols-outlined pending" aria-hidden="true">radio_button_unchecked</span>
+            </div>
+            <div class="step-content">
+              <div class="step-name">4. Hoàn Tất & Lưu Cơ Sở Dữ Liệu</div>
+              <div class="step-desc">Đánh giá điểm tin cậy AI và lưu hồ sơ vào hệ thống</div>
+            </div>
+            <div class="step-status" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="pipeline-progress">
+          <div id="pipeline-progress-bar" class="pipeline-progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== VIEW: PROFILE OUTPUT ===== -->
+    <section id="view-profile" class="view" aria-label="Hồ sơ doanh nghiệp" hidden>
+      <!-- Profile Header -->
+      <header class="profile-header" id="profile-header">
+        <div class="profile-identity">
+          <div class="profile-logo-wrapper" id="profile-logo-wrapper" aria-hidden="true">
+            <span class="material-symbols-outlined profile-logo-icon">corporate_fare</span>
+          </div>
+          <div>
+            <div class="profile-name-row">
+              <h2 id="profile-company-name" class="profile-company-name">Tên Doanh Nghiệp</h2>
+              <span id="profile-status-badge" class="badge badge-active">
+                <span class="badge-dot pulse-glow" aria-hidden="true"></span>
+                Đang Hoạt Động
+              </span>
+              <span id="profile-scale-badge" class="badge badge-scale">—</span>
+            </div>
+            <div class="profile-meta" id="profile-meta">
+              <span class="profile-meta-item" id="profile-website"></span>
+              <span class="profile-meta-item" id="profile-location"></span>
+              <span class="profile-meta-item" id="profile-industry-meta"></span>
+            </div>
+          </div>
+        </div>
+        <div class="profile-actions">
+          <button id="btn-edit-inputs" class="btn-secondary" aria-label="Chỉnh sửa dữ liệu nhập">
+            <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+            Chỉnh Sửa Input
+          </button>
+          <button id="btn-copy-json" class="btn-secondary" aria-label="Sao chép JSON">
+            <span class="material-symbols-outlined" aria-hidden="true">data_object</span>
+            Sao Chép JSON
+          </button>
+          <button id="btn-save-profile" class="btn-primary" aria-label="Lưu hồ sơ">
+            <span class="material-symbols-outlined" aria-hidden="true">save</span>
+            Lưu Hồ Sơ
+          </button>
+        </div>
+      </header>
+
+      <!-- Confidence Ribbon -->
+      <div class="confidence-ribbon" id="confidence-ribbon" role="status" aria-label="Độ tin cậy AI">
+        <div class="ribbon-left">
+          <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+          <span class="ribbon-label">Quy Trình Xử Lý Gemini Hoàn Tất</span>
+        </div>
+        <div class="ribbon-right">
+          <span class="ribbon-subtitle">Điểm Tin Cậy AI:</span>
+          <span id="confidence-score" class="ribbon-score">—%</span>
+        </div>
+      </div>
+
+      <!-- Bento Grid -->
+      <div class="bento-grid">
+        <!-- Corporate Overview (8 cols) -->
+        <div class="glass-panel col-span-8">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">corporate_fare</span>
+              <h3>Tổng Quan Doanh Nghiệp</h3>
+            </div>
+          </div>
+          <p id="profile-summary" class="profile-summary-text">Chưa có tóm tắt.</p>
+          <div class="profile-stats-grid">
+            <div class="profile-stat">
+              <div class="profile-stat-label">Lĩnh Vực</div>
+              <div id="profile-industry" class="profile-stat-value">—</div>
+            </div>
+            <div class="profile-stat">
+              <div class="profile-stat-label">Quy Mô</div>
+              <div id="profile-scale" class="profile-stat-value">—</div>
+            </div>
+            <div class="profile-stat">
+              <div class="profile-stat-label">Thị Trường</div>
+              <div id="profile-market" class="profile-stat-value">—</div>
+            </div>
+            <div class="profile-stat">
+              <div class="profile-stat-label">LinkedIn</div>
+              <div id="profile-linkedin-stat" class="profile-stat-value">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Registration Data (4 cols) -->
+        <div class="glass-panel col-span-4">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">policy</span>
+              <h3>Dữ Liệu Đăng Ký Pháp Lý</h3>
+            </div>
+          </div>
+          <ul class="registration-list" id="registration-list" aria-label="Chi tiết đăng ký">
+            <li class="reg-item">
+              <span class="reg-label">Tên Pháp Lý</span>
+              <span id="reg-entity-name" class="reg-value">—</span>
+            </li>
+            <li class="reg-item">
+              <span class="reg-label">Cơ Quan Đăng Ký</span>
+              <span id="reg-jurisdiction" class="reg-value">—</span>
+            </li>
+            <li class="reg-item">
+              <span class="reg-label">Trạng Thái</span>
+              <span id="reg-status" class="reg-value">—</span>
+            </li>
+            <li class="reg-item">
+              <span class="reg-label">Thị Trường Mục Tiêu</span>
+              <span id="reg-markets" class="reg-value">—</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Key Products (6 cols) -->
+        <div class="glass-panel col-span-6">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+              <h3>Sản Phẩm & Dịch Vụ Chính</h3>
+            </div>
+            <span class="panel-badge">Trích Xuất Bởi Gemini</span>
+          </div>
+          <div id="products-list" class="products-list" role="list" aria-label="Danh sách sản phẩm dịch vụ">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Market Analysis (6 cols) -->
+        <div class="glass-panel col-span-6">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">ssid_chart</span>
+              <h3>Phân Tích Thị Trường</h3>
+            </div>
+          </div>
+          <div class="market-analysis">
+            <div class="market-ring">
+              <svg viewBox="0 0 100 100" class="ring-svg" aria-hidden="true">
+                <circle class="ring-bg" cx="50" cy="50" r="40" />
+                <circle id="ring-fill" class="ring-fill" cx="50" cy="50" r="40"
+                  stroke-dasharray="251.2" stroke-dashoffset="251.2" />
+              </svg>
+              <div class="ring-label">
+                <div id="ring-percent" class="ring-percent">0%</div>
+                <div class="ring-sub">Thị Phần</div>
+              </div>
+            </div>
+            <div class="market-metrics">
+              <div class="market-metric">
+                <div class="metric-row">
+                  <span class="metric-label">Mức Độ Cạnh Tranh</span>
+                  <span id="metric-competitor" class="metric-value warning">Trung Bình</span>
+                </div>
+                <div class="metric-bar"><div id="bar-competitor" class="metric-bar-fill warning" style="width:50%"></div></div>
+              </div>
+              <div class="market-metric">
+                <div class="metric-row">
+                  <span class="metric-label">Rủi Ro Pháp Lý</span>
+                  <span id="metric-regulatory" class="metric-value success">Thấp</span>
+                </div>
+                <div class="metric-bar"><div id="bar-regulatory" class="metric-bar-fill success" style="width:25%"></div></div>
+              </div>
+              <div class="market-metric">
+                <div class="metric-row">
+                  <span class="metric-label">Tín Hiệu Tăng Trưởng</span>
+                  <span id="metric-growth" class="metric-value indigo">Cao</span>
+                </div>
+                <div class="metric-bar"><div id="bar-growth" class="metric-bar-fill indigo" style="width:60%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Intelligence Feed (12 cols) -->
+        <div class="glass-panel col-span-12">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">timeline</span>
+              <h3>Dòng Dữ Liệu Tình Báo</h3>
+            </div>
+          </div>
+          <div id="intelligence-feed" class="intelligence-feed" role="list" aria-label="Sự kiện tình báo">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Action -->
+      <div class="danger-zone">
+        <div id="delete-confirm-area">
+          <button id="btn-delete-profile" class="btn-danger" aria-label="Xóa hồ sơ này">
+            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            Xóa Hồ Sơ
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== VIEW: SETTINGS ===== -->
+    <section id="view-settings" class="view" aria-label="Cài đặt hệ thống" hidden>
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Cài Đặt Hệ Thống</h2>
+          <p class="page-subtitle">Cấu hình InsightEngine & Cấu hình khóa Gemini API</p>
+        </div>
+      </div>
+      <div class="settings-grid">
+        <div class="glass-panel settings-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">vpn_key</span>
+              <h3>Cấu Hình API Gemini</h3>
+            </div>
+          </div>
+          <div class="settings-list">
+            <div class="setting-row-vertical">
+              <label for="setting-gemini-key" class="setting-label">Khóa API Gemini (Gemini API Key)</label>
+              <div class="key-input-group">
+                <input type="password" id="setting-gemini-key" class="key-input" placeholder="Dán khóa API Gemini của bạn vào đây..." autocomplete="off" />
+                <button id="btn-save-key" class="btn-primary-sm">Lưu Khóa API</button>
+              </div>
+              <div class="setting-desc mt-1">Kích hoạt tính năng Google Search Grounding tra cứu dữ liệu thời gian thực.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-panel settings-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+              <h3>Cấu Hình Chung</h3>
+            </div>
+          </div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Giao Diện Tối (Dark Mode)</div>
+                <div class="setting-desc">Sử dụng tông màu tối làm mặc định</div>
+              </div>
+              <label class="toggle" aria-label="Bật tắt giao diện tối">
+                <input type="checkbox" id="setting-dark-mode" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Tự Động Lưu Hồ Sơ</div>
+                <div class="setting-desc">Tự động lưu hồ sơ đã tạo vào cơ sở dữ liệu</div>
+              </div>
+              <label class="toggle" aria-label="Bật tắt tự động lưu">
+                <input type="checkbox" id="setting-auto-save" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Tốc Độ Hiệu Ứng Dây Chuyền</div>
+                <div class="setting-desc">Thời gian chuyển tiếp từng bước (ms)</div>
+              </div>
+              <select id="setting-pipeline-speed" class="setting-select" aria-label="Tốc độ hiệu ứng">
+                <option value="600">Nhanh (600ms)</option>
+                <option value="800" selected>Bình thường (800ms)</option>
+                <option value="1200">Chậm (1200ms)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-panel settings-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">storage</span>
+              <h3>Cơ Sở Dữ Liệu & Bộ Nhớ</h3>
+            </div>
+          </div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Tổng số hồ sơ đang lưu</div>
+                <div class="setting-desc">Hồ sơ đã được lưu trong cơ sở dữ liệu</div>
+              </div>
+              <span id="setting-profile-count" class="setting-stat">0</span>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Xóa toàn bộ dữ liệu</div>
+                <div class="setting-desc">Xóa vĩnh viễn tất cả hồ sơ đã tạo</div>
+              </div>
+              <button id="btn-clear-all" class="btn-danger-sm" aria-label="Xóa toàn bộ dữ liệu">Xóa Tất Cả</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-panel settings-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined" aria-hidden="true">info</span>
+              <h3>Thông Tin Hệ Thống</h3>
+            </div>
+          </div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div class="setting-label">Phiên Bản</div>
+              <span class="setting-stat">2.5.0 (Tiếng Việt)</span>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Mô Hình AI</div>
+              <span class="setting-stat">Gemini 2.5 Flash</span>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Nền Tảng Đổ Bộ</div>
+              <span class="setting-stat">Google Cloud Run</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

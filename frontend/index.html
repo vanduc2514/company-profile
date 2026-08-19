@@ -531,6 +531,31 @@
           </div>
         </div>
 
+        <!-- Company Available Addresses & Locations (12 cols) -->
+        <div class="glass-panel col-span-12 company-locations-panel" id="panel-company-locations">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="material-symbols-outlined text-accent" aria-hidden="true">pin_drop</span>
+              <h3>Danh Sách Địa Chỉ & Hiện Diện Cơ Sở (Available Addresses)</h3>
+            </div>
+            <div class="location-stats-row" id="locations-count-badges">
+              <span class="badge badge-scale" id="badge-total-locations">0 Địa Điểm</span>
+              <span class="badge badge-active" id="badge-open-locations">0 Đang Hoạt Động</span>
+              <span class="badge badge-warning" id="badge-closed-locations">0 Đã Đóng Cửa</span>
+            </div>
+          </div>
+
+          <div class="available-addresses-container" id="available-addresses-container">
+            <div class="addresses-section-header">
+              <span class="addresses-section-hint">Tổng hợp các trụ sở, chi nhánh và cơ sở hoạt động của doanh nghiệp (bao gồm cả trạng thái hoạt động và đã đóng cửa). Nhấp vào bất kỳ địa chỉ nào để mở trực tiếp trên <strong>Google Maps</strong>.</span>
+            </div>
+
+            <div id="company-addresses-list" class="addresses-grid" role="list" aria-label="Danh sách địa chỉ doanh nghiệp">
+              <!-- Populated dynamically by JS -->
+            </div>
+          </div>
+        </div>
+
         <!-- Intelligence Feed (12 cols) -->
         <div class="glass-panel col-span-12">
           <div class="panel-header">

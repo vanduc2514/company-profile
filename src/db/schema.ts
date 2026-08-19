@@ -29,6 +29,7 @@ export const profiles = pgTable('profiles', {
   inputs: jsonb('inputs'),
   products: jsonb('products'),
   registrationDetails: jsonb('registration_details'),
+  locations: jsonb('locations'),
   marketShare: integer('market_share').default(75),
   metrics: jsonb('metrics'),
   feed: jsonb('feed'),

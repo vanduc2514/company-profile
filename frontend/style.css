@@ -1445,6 +1445,46 @@ input, textarea, select { font-family: inherit; }
   margin-bottom: 24px;
 }
 
+/* Light mode specific styling for search-hero-panel */
+.light .search-hero-panel {
+  background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.08);
+}
+
+.light .hero-badge {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #4f46e5;
+}
+
+.light .hero-title {
+  color: #0f172a;
+}
+
+.light .hero-subtitle {
+  color: #475569;
+}
+
+.light .hero-search-box {
+  background: #ffffff;
+  border: 1.5px solid rgba(99, 102, 241, 0.25);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.08);
+}
+
+.light .hero-search-box:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15), 0 4px 24px rgba(99, 102, 241, 0.12);
+}
+
+.light .hero-search-box input {
+  color: #0f172a;
+}
+
+.light .hero-search-box input::placeholder {
+  color: #94a3b8;
+}
+
 .hero-badge {
   display: inline-flex;
   align-items: center;

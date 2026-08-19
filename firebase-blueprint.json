@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile authenticated via Firebase Auth",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique Firebase Authentication UID"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "User avatar URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account creation timestamp"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Enterprise intelligence profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique profile identifier"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Author UID"
+        },
+        "companyName": {
+          "type": "string",
+          "description": "Enterprise name"
+        },
+        "industry": {
+          "type": "string",
+          "description": "Industry category"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Executive summary"
+        },
+        "confidenceScore": {
+          "type": "number",
+          "description": "Confidence rating"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["id", "companyName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile store"
+    },
+    "/profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "Enterprise intelligence profile documents"
+    }
+  }
+}

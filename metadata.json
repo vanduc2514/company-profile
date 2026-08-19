@@ -1,0 +1,8 @@
+{
+  "name": "InsightEngine",
+  "description": "Phân tích và tạo hồ sơ doanh nghiệp tự động bằng Google Gemini Search Grounding",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

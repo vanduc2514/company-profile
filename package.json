@@ -1,0 +1,23 @@
+{
+  "name": "insightengine",
+  "version": "2.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'Build complete'"
+  },
+  "dependencies": {
+    "@google/genai": "latest",
+    "@types/pg": "^8.23.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "express": "^4.21.2",
+    "firebase": "^12.17.1",
+    "firebase-admin": "^14.2.0",
+    "pg": "^8.23.0"
+  }
+}
